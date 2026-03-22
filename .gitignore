@@ -1,0 +1,11 @@
+config.yaml
+monitor_state.json
+holiday_cache.json
+monitor.log
+*.log
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.key
+*.pem

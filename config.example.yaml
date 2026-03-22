@@ -1,0 +1,120 @@
+# ================================================================
+#  DB Monitor v6.1 配置示例（复制为 config.yaml 后填写实际值）
+# ================================================================
+
+
+# ─────────────────────────────────────────────────────────────────
+#  一、数据库连接（全局默认，每条 SQL 可在 queries 中单独覆盖）
+# ─────────────────────────────────────────────────────────────────
+#  支持：mysql | oracle | postgresql | mssql | sqlite
+
+database:
+  type: mysql
+  host: 127.0.0.1
+  port: 3306
+  database: mydb
+  username: root
+  password: "YOUR_DB_PASSWORD"
+  charset: utf8mb4        # MySQL 专用，其他数据库删除此行
+
+
+# ─────────────────────────────────────────────────────────────────
+#  二、检测 SQL 列表
+# ─────────────────────────────────────────────────────────────────
+#
+#  特殊列（写在 SELECT 中）：
+#    _webhook      推送目标 Webhook，逗号分隔多个
+#    _jump_url     点击消息卡片时跳转的链接
+#    _interval     推送冷却（分钟），0=不限
+#    _title        自定义告警消息标题
+#    _time_window  推送时间段，格式 'HH:MM-HH:MM'（'all'=不限）
+#    _push_days    推送日期：all | workday | weekday | Mon,Tue,...
+#    _bitable_table 飞书多维表格 table_id（'skip'=不记录此 SQL）
+#    _check_type   检查类型标签，自由文本
+
+queries:
+
+  - name: "超时未支付订单"
+    description: "下单超过 24 小时仍未支付的订单"
+    sql: |
+      SELECT
+        order_id, user_id, amount, created_at,
+        'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WEBHOOK_KEY' AS _webhook,
+        'https://your-system.com/orders'  AS _jump_url,
+        30                               AS _interval,
+        '超时订单告警'                   AS _title,
+        '09:00-18:00'                    AS _time_window,
+        'workday'                        AS _push_days
+      FROM orders
+      WHERE status = 'pending'
+        AND created_at < NOW() - INTERVAL 1 DAY
+      LIMIT 50
+    threshold: 0
+
+  - name: "库存预警"
+    description: "库存低于安全库存线"
+    sql: |
+      SELECT
+        sku_code, stock, safety_stock,
+        'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WEBHOOK_KEY' AS _webhook,
+        'https://your-system.com/inventory' AS _jump_url,
+        60                                  AS _interval,
+        '库存预警'                          AS _title,
+        'all'                               AS _time_window,
+        'all'                               AS _push_days
+      FROM products
+      WHERE stock < safety_stock
+      LIMIT 50
+    threshold: 0
+
+
+# ─────────────────────────────────────────────────────────────────
+#  三、企业微信全局默认（SQL 中未指定时的兜底配置）
+# ─────────────────────────────────────────────────────────────────
+
+wecom:
+  webhook:  "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_WEBHOOK_KEY"
+  jump_url: "https://your-system.com/dashboard"
+  pic_url:  ""
+  default_push_interval_minutes: 0    # 0 = 不限制，有异常就推
+
+
+# ─────────────────────────────────────────────────────────────────
+#  四、飞书多维表格（告警日志记录，可选）
+# ─────────────────────────────────────────────────────────────────
+#
+#  开通步骤：
+#  1. 飞书开放平台 https://open.feishu.cn/app → 应用权限管理
+#     开通：bitable:app（多维表格数据读写）并发布
+#  2. 在飞书多维表格中添加应用（右上角「...」→「添加应用」）
+#  3. 新建数据表，添加字段（见 README.md）
+#  4. app_token：URL 中 /base/ 后面的字符串
+#     table_id：运行 python monitor.py --list-tables 查询
+
+feishu:
+  app_id:     "YOUR_APP_ID"
+  app_secret: "YOUR_APP_SECRET"
+  bitable:
+    enabled:   false              # true = 开启飞书日志记录
+    app_token: "YOUR_APP_TOKEN"
+    table_id:  "YOUR_TABLE_ID"
+
+
+# ─────────────────────────────────────────────────────────────────
+#  五、检测周期
+# ─────────────────────────────────────────────────────────────────
+
+schedule:
+  enabled: false
+  check_interval_seconds: 60         # 建议 30~300
+
+query_timeout: 60                    # 单条 SQL 最长执行时间（秒），0=不限制
+
+
+# ─────────────────────────────────────────────────────────────────
+#  六、日志
+# ─────────────────────────────────────────────────────────────────
+
+log:
+  level: INFO
+  file:  monitor.log
